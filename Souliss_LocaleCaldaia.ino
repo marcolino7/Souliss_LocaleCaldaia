@@ -31,6 +31,10 @@
 #define USART_TXENABLE			0
 #define USART_TXENPIN			3
 
+#define USARTBAUDRATE_INSKETCH
+#define	USART_BAUD57k6			1
+#define USART_BAUD115k2			0
+
 #define USART_DEBUG  			0
 
 #include "bconf/StandardArduino.h"			// Use a standard Arduino
@@ -182,7 +186,7 @@ void loop()
 		FAST_50ms() {	// We process the logic and relevant input and output every 50 milliseconds
 			//-------- T19 Controllo Servo
 			// Use Pin2 as ON command, Pin2 as ON-OFF command
-			Souliss_DigIn(PIN_SERVOBUTT, Souliss_T1n_ToogleCmd, memory_map, LEDCONTROL);
+			Souliss_DigIn(PIN_SERVOBUTT, Souliss_T1n_ToggleCmd, memory_map, LEDCONTROL);
 			// Execute the logic that handle the LED
 			Souliss_Logic_T19_Bis(memory_map, LEDCONTROL, &data_chg);
             //Souliss_Logic_T19(memory_map, LEDCONTROL, &data_chg);
@@ -192,11 +196,11 @@ void loop()
 			Souliss_DigOut(PIN_SERVOEN, Souliss_T1n_Coil, memory_map, LEDCONTROL);
 
 			//-------- T12 Controllo Caldaia pin 3 pulsante pin 4 Out
-			Souliss_DigIn(PIN_CALDAIABUTT, Souliss_T1n_ToogleCmd, memory_map, TERMOSTATOOUT);		
+			Souliss_DigIn(PIN_CALDAIABUTT, Souliss_T1n_ToggleCmd, memory_map, TERMOSTATOOUT);		
 			Souliss_DigOut(PIN_CALDAIAEN, Souliss_T1n_Coil, memory_map, TERMOSTATOOUT);	
 
 			//-------- T11 Aspiratore pin 6 pulsante, pin 7 Out
-			Souliss_DigIn(PIN_FANBUTT, Souliss_T1n_ToogleCmd, memory_map, FAN);		
+			Souliss_DigIn(PIN_FANBUTT, Souliss_T1n_ToggleCmd, memory_map, FAN);		
 			Souliss_DigOut(PIN_FANEN, Souliss_T1n_Coil, memory_map, FAN);	
 		}
 
@@ -339,7 +343,7 @@ void Souliss_Logic_T19_Bis(U8 *memory_map, U8 slot, U8 *trigger)
     // Look for input value, update output. If the output is not set, trig a data
     // change, otherwise just reset the input
     
-    if (memory_map[MaCaco_IN_s + slot] == Souliss_T1n_ToogleCmd)        // Toogle Command
+    if (memory_map[MaCaco_IN_s + slot] == Souliss_T1n_ToggleCmd)        // Toogle Command
     {
         // Toogle the actual status of the light
         if(memory_map[MaCaco_OUT_s + slot] == Souliss_T1n_OffCoil)        
