@@ -26,11 +26,6 @@
 
 ***************************************************************************/
 
-#define USARTDRIVER_INSKETCH
-#define	USARTDRIVER				Serial	//Dico al driver vNet di usare la seriale 0 dell'UNO
-#define USART_TXENABLE			0
-#define USART_TXENPIN			3
-
 #define USARTBAUDRATE_INSKETCH
 #define	USART_BAUD57k6			1
 #define USART_BAUD115k2			0
@@ -41,7 +36,6 @@
 #include "conf/usart.h"
 
 #include "Souliss.h"
-#include <SPI.h>
 
 #include <Servo.h>
 #include <Termistore.h>
@@ -121,6 +115,23 @@ U8 data_chg = 1;
 
 void setup()
 {	
+
+	//-------Servomotore
+	pinMode(PIN_SERVOBUTT, INPUT);      // NON USATO - Pulsante di accensione T19 Hardware pulldown required
+	pinMode(PIN_SERVOEN, OUTPUT);		// Abilita servomotore
+	myservo.attach(PIN_SERVO);		// attaches the servo on pin 9 to the servo object
+									//-------Ingresso Termostato
+	pinMode(PIN_TERMOSTATO, INPUT);
+	//-------Controllo Linea Termostato
+	pinMode(PIN_CALDAIABUTT, INPUT);		//Pulsante HW Termostato
+	pinMode(PIN_CALDAIAEN, OUTPUT);		//Controllo Caldaia
+										//------Aspiratore
+	pinMode(PIN_FANBUTT, INPUT);      // Pulsante HW Fan
+	pinMode(PIN_FANEN, OUTPUT);     // Fan
+									//-------Ingresso Rilevatore di GAS
+	pinMode(PIN_GASDETEC, INPUT);
+
+
 	Souliss_SetAddress(myvNet_address, myvNet_subnet, myvNet_supern);		
 
 	// Tipico T19 per il controllo del Servomotore
@@ -142,35 +153,10 @@ void setup()
 	//Tipico T13 rilevatore di GAS
 	Souliss_SetT13(memory_map, GASDETECTOR);
 
-
-	//Ingresso DHT22
-	//pinMode(PIN_DHT22, INPUT_PULLUP);
-	//digitalWrite(PIN_DHT22,HIGH);
-
 	//T52 Temperatur DHT
 	Souliss_SetT52(memory_map, DHT22_TEMP);
 	//T53 Umidità
 	Souliss_SetT53(memory_map, DHT22_HUMI);
-
-	//ssDHT_Begin(DHT_id1);
-
-
-	//-------Servomotore
-	pinMode(PIN_SERVOBUTT, INPUT);      // NON USATO - Pulsante di accensione T19 Hardware pulldown required
-	pinMode(PIN_SERVOEN, OUTPUT);		// Abilita servomotore
-	myservo.attach(PIN_SERVO);		// attaches the servo on pin 9 to the servo object
-	//-------Ingresso Termostato
-	pinMode(PIN_TERMOSTATO, INPUT);
-	//-------Controllo Linea Termostato
-	pinMode(PIN_CALDAIABUTT, INPUT);		//Pulsante HW Termostato
-	pinMode(PIN_CALDAIAEN, OUTPUT);		//Controllo Caldaia
-	//------Aspiratore
-	pinMode(PIN_FANBUTT, INPUT);      // Pulsante HW Fan
-	pinMode(PIN_FANEN, OUTPUT);     // Fan
-	//-------Ingresso Rilevatore di GAS
-	pinMode(PIN_GASDETEC, INPUT);
-	//Ingresso DHT22
-	//pinMode(PIN_DHT22, INPUT);
 		
 	//Leggo dalla EEPROM il la posizione del servomotore e lo imposto in souliss
 	servo_eeprom_pos = EEPROM.read(EPR_SERVO);
@@ -209,26 +195,32 @@ void loop()
 			move_servo();
 		}
 
-		FAST_90ms() { 
+		SHIFT_90ms(1){
 			//Esegui Logic per il controllo caldaia
 			Souliss_Logic_T12(memory_map, TERMOSTATOOUT, &data_chg);
 			//Logica Ingresso Termostato
-			Souliss_Logic_T13(memory_map, TERMOSTATOIN,&data_chg);
-			//Logica Ingresso Allarme GAS
-			Souliss_Logic_T13(memory_map, GASDETECTOR,&data_chg);
+			Souliss_Logic_T13(memory_map, TERMOSTATOIN, &data_chg);
+		}
 
+		SHIFT_90ms(2) {
+			//Logica Ingresso Allarme GAS
+			Souliss_Logic_T13(memory_map, GASDETECTOR, &data_chg);
 			// Esegui Logic per la linea FAN
 			Souliss_Logic_T11(memory_map, FAN, &data_chg);
+		}
 
-            // Compare the acquired input with the stored one, send the new value to the
-            // user interface if the difference is greater than the deadband
-            Souliss_Logic_T52(memory_map, ANALOGDAQ1, DEADBANDNTC, &data_chg);
+		SHIFT_90ms(3) {
+			// Compare the acquired input with the stored one, send the new value to the
+			// user interface if the difference is greater than the deadband
+			Souliss_Logic_T52(memory_map, ANALOGDAQ1, DEADBANDNTC, &data_chg);
 			Souliss_Logic_T52(memory_map, ANALOGDAQ2, DEADBANDNTC, &data_chg);
+
+		}
+
+		FAST_90ms() { 
 		}
 
 		FAST_110ms() {
-			// Retreive data from the communication channel
-			Souliss_CommunicationData(memory_map, &data_chg);
 		}
 
 		FAST_510ms() {	// We retrieve data from the node with index 1 (peervNet_address)
@@ -273,8 +265,6 @@ void loop()
 			
 			Souliss_Logic_T52(memory_map, DHT22_TEMP, DEADBANDLOW, &data_changed);
 			Souliss_Logic_T53(memory_map, DHT22_HUMI, DEADBANDLOW, &data_changed);
-			
-			//Souliss_T11_Timer(memory_map, FAN);
 		
 		}
 
@@ -287,17 +277,14 @@ void loop()
                 servo_eeprom_pos=pos;
             }
         }
-
+		FAST_PeerComms();
 }
 	
 	EXECUTESLOW() {
 		UPDATESLOW();
 
-		SLOW_10s() {		// We handle the light timer with a 10 seconds base time
-			NTCRead();	//Leggo gli NTC e scrivo le varie variabili
-			// Timer ger gestire il ritardo di spegnimento della ventola
-			// Con la combinazione di 0x32 e 10s, ottngo circa 7 minuti e mezzo
-			//Souliss_T11_Timer(memory_map, FAN);
+		SLOW_10s() {
+			NTCRead();
 			DHTRead();
 		}
 	}		
